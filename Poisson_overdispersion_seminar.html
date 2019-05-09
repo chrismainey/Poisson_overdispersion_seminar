@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+  <head>
+    <title>Dealing with noisy count data: strategies for tackling over-dispersion, using R</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Chris Mainey" />
+    <meta name="date" content="2019-05-09" />
+    <link href="Poisson_overdispersion_seminar_files/remark-css-0.0.1/default.css" rel="stylesheet" />
+    <link href="Poisson_overdispersion_seminar_files/remark-css-0.0.1/default-fonts.css" rel="stylesheet" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# Dealing with noisy count data: strategies for tackling over-dispersion, using R
+## Chris Mainey PhD Student - UCL Intelligence Analyst, University Hospital Birmingham NHS FT <a href="mailto:christopher.mainey.14@ucl.ac.uk" class="email">christopher.mainey.14@ucl.ac.uk</a> <a href="mailto:chris.mainey@uhb.nhs.uk" class="email">chris.mainey@uhb.nhs.uk</a>
+### Chris Mainey
+### 2019-05-09
+
+---
+
+#  Summary 
+
++ Count data
++ Poisson model
++ Over-dispersion
+	+ Scaling
+	+ Mixture models
+	+ Multi-level models
++ I use R mostly, so most examples will be in R!
+
+---
+#  R Evangelism?. 
+
+.pull-left[
++ R is an open-source statistical programming language
+	+ Free
+	+ Collaborative
++ One of the leading data science languages
++ Thousands of 'packages' available for specific jobs, often written by researchers
++ Integrates well with other environments
++ Can write into `markdown` or embed in webapps `Shiny`
++ Strong graphical capabilities
+]
+
+.pull-right[![](assets/img/image3.png)]
+
+---
+#  Regression (simplified) 
+
+.pull-left[
+![](assets/img/image4.png)
+
+.pull-right[
++ Want to predict Y, using X:
+  + Intercept
+  + Coefficient (how much x affects y)
+  + Error (?Residual?)
+
+
++ This is a linear regression, which has an exact solution. The solutions discussed in the following slides are more complicated as they are estimated, with no exact solution.
+]
+
+
+---
+#  Count data 
+
++ My PhD work is related counts of ?incidents? reported in NHS hospitals
+	+ Poorly recorded
+	+ Few obvious predictors
++ Counts are common in health and economic data, (often ?panel? data)
++ Usually formed from aggregates:
+	+ Attenders at a clinic
+	+ Number of readmission to hospital etc.
+
+---
+#  Properties of count data 
+
++ Discrete
+	+ E.g. 10 or 11 patients, but not 10.5
++ Range from zero to infinity
+	+ Usually can?t have a negative count
++ Occur in a fixed time period, with a known average rate.
++ Not normally distributed
+
+---
+#  Poisson Distribution 
+
++ Probability of count occurring in a fixed interval:
++ where *&lt;U+F06D&gt;* is the expected average count, is Euler?s number (the base of the natural logarithm: ~2.71828), and is the factorial of .
++ Depending on notation used, ? is often &lt;U+03BB&gt; , and used interchangeably.
+
+---
+#  Poisson Distribution, increasing mean count 
+
+![](assets/img/image6.png)
+
+---
+
+
+---
+#  Basic Poisson count models 
+
++ **Generalized linear model (GLM):**
++ is the expected , ** is a link-function from the exponential family of distributions, is the th row of a model matrix and *&lt;U+F062&gt;* is a vector of unknown parameters (model coefficients) (Wood, 2017).
++ **Poisson model:**
++ With is the intercept, model coefficient of predictor for line of model matrix .  This extends to predictor variables.
+
+---
+#  What is overdispersion (OD)? 
+
++ Poisson dist. assumes  Mean = variance
++ If variance &gt; mean, Poisons model will underestimate the variance:
+	+ SE &amp; CIs too small, ?Significance? overstated
++ Many mechanisms, including:
+	+ Mis-specification (lack of predictors, poorly parameterised)
+	+ Presence of outliers
+	+ Variation between response probabilities
+
+---
+#  Testing for overdispersion 
+
++ Ratio of sum of squared Pearson residuals to residual degrees of freedom
+	+ Approximately distributed
++ Number of R functions:
+	+ AER::dispersiontest()
+	+ s jstats::overdisp()
++ Home-brewed:
+
+sum(residuals(model, type="pearson")^2) / model$df.residual
+
+---
+#  Options with Poisson models: 
+
++ Fit simple model and ignore OD
++ Fit model, then use techniques to scale/estimate OD and correct
+	+ Robust SE  or Bootstrap
++ Use a model that accounts for this:
+	+ Scaled Poisson or related
+	+ Complex variance structure
+
+---
+#  Robust SE 
+
++ One method is to use the ?sandwich? variance estimators, proposed by Huber.
++ ?Robust? option in Stata, few lines of code in R
+
+l ibrary(sandwich)
+
+cov.m1 &lt;- **vcovHC** (m1, type="HC0")
+
+std.err &lt;- **sqrt** ( **diag** (cov.m1))
+
+r.est &lt;- **cbind** (Estimate= **coef** (m1), "Robust SE" = std.err, "Pr(&gt;|z|)" = 2 * **pnorm** ( **abs** ( **coef** (m1)/std.err), lower.tail=FALSE), LL = **coef** (m1) - 1.96 * std.err, UL = **coef** (m1) + 1.96 * std.err) 
++ https://stats.idre.ucla.edu/r/dae/poisson-regression / Good example page
+[https://stats.idre.ucla.edu/r/dae/poisson-regression](https://stats.idre.ucla.edu/r/dae/poisson-regression/)
+[/](https://stats.idre.ucla.edu/r/dae/poisson-regression/)
+
+---
+#  Bootstrap 
+
++ Resampling with replacement ? (Efron 1979)
++ Create sampling distribution of mean
++ Handy, because this is normally distributed (if parametric bootstrap)
++ R: ?boot? package or ? car::Boot ? is a convenience wrapper for glm.
+
+---
+#  Additive Random effects (Spiegelhalter, 2005a) 
+
++ Development of work for meta-analysis (DerSimonian and Laird 1986)
++ Used by CQC (CQC, 2014)
++ Transform to z-scores
++ Assess distribution and truncate (?Winsorization?)
++ Calculated difference in variance
++ Presented as adjusted z-scores or by adjusting control limits on SPC chart.
+
+---
+#  Funnel plot with OD-adjusted limits 
+
++ Funnel control limits at 2 &amp; 3 s in left panel, inflated by additive scale factor t 2 in right panel
+![](assets/img/image10.png)
+
+---
+#  Scaling 
+
++ Scale residual variance
+	+ Quasi-Poisson
+	+ Mixture models
++ Quasi-likelihood (Nelder &amp; Wedderburn 1979)
+	+ Simpler mean-variance relationship, not full distribution
+	+ Estimating Equations, as no likelihood to maximise
+	+ Built-in ?family? in R, use:
+		+ ??family=?quasipoisson??
+
+---
+#  ?Mixture? models (Cameron &amp; Trivedi, 2013), (Rabe-Hesketh and Skrondal, 2012) 
+
++ Two distributions used
++ ?Between? &amp; ?Within? variance
++ Commonly Negative Binomial (NB1)
+	+ NB1 group-specific mean, multiplicative
+	+ NB2 gamma/Poisson, quadratic
++ Weight the mean differently, NB2 gives higher weight to smaller counts
+
+---
+#  Other scaled models 
+
++ Generalized Poisson ?  more complex scale factor
++ Conway-Maxwell Poisson ? distribution on scale factor
++ glmmTMB, COMPoisson, VGAM
++ Various assumptions about mean/variance
+	+ All authors have particular cases in mind.
+	+ Challenging to know why one is better
+
+---
+#  Mixture &gt; Mixed Models (Goldstein 2010) 
+
++ Sometimes a model structure has implicit levels
++ Variance can be partitioned between levels:
+	+ E.g. patients within GP practises submitting to a trial
+	+ Patients followed up at several points over time
++ Breaks the normal regression assumption of ?independence? and ?homoscedasticity
+	+ Can lead to OD
+
+---
+#  Mixed models (simplified) 
+
++ As per glms, but with extra component for variance:
+
+With structure similar to GLMs, but with an additional parameter: , the random effect, for *j* th cluster.  Random effects are assumed to be normally distributed with mean 0 and a dispersion matrix depending on unknown variance components (Breslow and Clayton, 1993 )
+
+No additional &lt;U+F062&gt; , but variance component J
+
+---
+#  Random intercept Model 
+
+![](assets/img/image11.emf)
+
+---
+#  Random intercept Model 
+
+![](assets/img/image12.emf)
+
+---
+#  Random intercept Model 
+
+![](assets/img/image13.emf)
+
+---
+#  R options 
+
++ l me4: glmer is the most common package, but many others, including:
+	+ MASS::glmmPQL
+	+ MCMCglmm
+	+ glmmTMB::glmmTMB
+	+ Stan
+
+m1 &lt;- glmer(y~x+(1|f),data=d,family=poisson)
+
+---
+#  Other options 
+
++ Principle Components / Factor Analysis
++ Generalised Additive Models
++ Tree-based models / Random Forests
+
+---
+#  PCA general principle 
+
++ Assume that variables are proxies for underlying ?components,? e.g.
+	+ Multiple questions in psychological questionnaires
++ Rank how much variance each components explain
++ ?Rotate? axis to components and use ?loadings? to examine which components correlate with predictors
+
+---
+#  Generalised Additive Models (Hastie &amp;Tibshirani, 1986) 
+
++ Smooth functions of variables:
++ Lost of options for smoothers:
+	+ Cubic Spline
+	+ Thin-plate Splines
+	+ Tensor products
++ Need to estimate degree of smoothness and penalty term
+
+---
+#  What is a Spline? 
+
++ Piecewise polynomials
++ Joined at ?knot-points?
+	+ Continuous at second-derivative
++ Represented as basis functions
+
+(Wood 2017)
+![](assets/img/image14.png)
+
+---
+#  GAMs 
+
++ In R, most popular package mgcv  (Wood, 2017)
+	+ mgcv::gam(y ~ s(x, bs=?cr?))
+	+ s() is a smoother construct
++ Estimates smooth parameters as part of model
++ Parametric terms can still be used
++ Random Effects can be included if simple
+	+ Called by gamm4 or gamm (using lme4 or nlme )
+
+---
+#  Choosing the number of knots (k) 
+
++ k=10, Natural-cubic spline
++ -  Reasonable smooth fit
++ k=20, Natural-cubic spline
++ - Too ?wiggly?
++ AIC of glm = 5638.552, 	 AIC(k=10) = 5603.204, 	 AIC(k=20) = 5585.923
++ **Beware of over-fitting smoothers based on AIC alone!**
++ gam( numvisit ~ badh + (age , bs =? cr ?, k=?), data= badhealth , family =" poisson ")
+![](assets/img/image15.png)
+
+
+---
+#  GAM Pros and Cons 
+
++ Smooth functions often represent data better than raw values
++ Requires choosing a smoother, R can estimate parameters including knots and penalty
++ Can reduce overdispersion due to noise
++ Can be heavy on degrees of freedom
++ Need to be careful of over-fitting
++ More complex regression mechanisms
+
+---
+#  Random Forests (1)  (Breiman, 2001)  
+.pull-left[
++ Regression Trees (Breiman et al 1984) : rpart
+	+ partition on greatest variance
++ Tendency to over-fit
+	+ Early stopping (pruning) used
+	+ Cross-validated
+	]
+.pull-right[
+
+```r
+library(rpart)
+library(rpart.plot)
+fit&lt;-rpart(Price ~ Mileage + Type + Country, cu.summary)
+rpart.plot(fit)
+```
+
+![](Poisson_overdispersion_seminar_files/figure-html/tree-1.png)&lt;!-- --&gt;
+]
+---
+#  Random Forests (2) 
+
++ Combine tree-based methods with Bootstrapping
+	+ Random sample of both data &amp; parameters
++ Pros and cons:
+	+ Predict very well
+	+ Less likely to over-fit
+	+ Linearity or distribution not really an issue
++ Hard to visualise/understand
+	+ Not able to use random effects
+
+---
+#  How do we compare them? 
+
++ __'All models are wrong, but some are useful'__ (George Box)
++ For models with a likelihood:
+	+ AIC (Akaike, 1998)   - AIC(), or part of summary() , `bbmle` package has nice `ICtab` function and `QAIC`
+	+ Likelihood ratio test for nested models (Rabe-Hesketh and Skrondal, 2012)
+	+ Beware the boundary effect!
+	+ Marginal or Conditional (Greven &amp; Kneib, 2010) `cAIC4` and `mgcv` packages
++ Prediction Error: `caret`, `ModelMetrics`, `yardstick` packages
+	+ Root Mean Squared error
+	+ Mean Absolute Error
++ 'Significance'  -  Not well defined
+	+ `lme4` authors regard significance test for random effects as wrong, due to distribution
+
+---
+#  Best options for Incident data? 
+
++ Definite clustering:
+	+ Random-intercepts
++ Collinearity / Noisy data
+	+ Generalised Additive Models
++ Marginal models 
++ Additive-OD model
+
+---
+#  References 
+
++ AKAIKE, H. 1998. Information Theory and an Extension of the Maximum Likelihood Principle. *In:* PARZEN, E., TANABE, K. &amp; KITAGAWA, G. (eds.) *Selected Papers of Hirotugu Akaike.* New York, NY: Springer New York .
++ BAE, S., FAMOYE, F., WULU, J. T., BARTOLUCCI, A. A. &amp; SINGH, K. P. 2005. A rich family of generalized Poisson regression models with applications. *Mathematics and Computers in Simulation,* 69 **,** 4-11 .
++ BREIMAN, L . (2001) Random Forests. *Machine* *Learning*  45 : 5. https:// doi.org/10.1023/A:1010933404324
++ BREIMAN L., FRIEDMAN J . H., OLSHEN R. A., and STONE, C. J. (1984) *Classification and Regression Trees.* Wadsworth .
++ BRESLOW, N. E. and D. G. CLAYTON (1993). "Approximate Inference in Generalized Linear Mixed Models." Journal of the American Statistical Association  **88** (421): 9-25.
++ BURNHAM , K. P. &amp; ANDERSON, D. R. 2004. Multimodel Inference: Understanding AIC and BIC in Model Selection. *Sociological Methods &amp; Research,* 33 **,** 261-304 .
++ CARE QUALITY COMMISSION (CQC) 2014. NHS acute hospitals Statistical methodology. *Intelligent Monitoring.* *http://* *www.cqc.org.uk/sites/default/files/Intelligent%20Monitoring%20Statistical%20Methodology%20July%20FINAL%20PDF.pdf* **
++ CAMERON , A. C. &amp; TRIVEDI, P. K. 2013b. Generalized Count Regression. *In:* CAMERON, C. A. &amp; TRIVEDI, P. K. (eds.) *Regression Analysis of Count Data.* 2 ed. Cambridge: Cambridge University Press .
++ EFRON , B. 1979. Bootstrap Methods: Another Look at the Jackknife. *The Annals of Statistics,* 7 **,** 1-26 .
++ FAMOYE, F. 1993. Restricted generalized poisson regression model. *Communications in Statistics - Theory and Methods,* 22 **,** 1335-1354 .
+[https://](http://www.cqc.org.uk/sites/default/files/Intelligent%20Monitoring%20Statistical%20Methodology%20July%20FINAL%20PDF.pdf)
+[doi.org/10.1023/A:1010933404324](https://doi.org/10.1023/A:1010933404324)
+[http://](http://www.cqc.org.uk/sites/default/files/Intelligent%20Monitoring%20Statistical%20Methodology%20July%20FINAL%20PDF.pdf)
+[www.cqc.org.uk/sites/default/files/Intelligent%20Monitoring%20Statistical%20Methodology%20July%20FINAL%20PDF.pdf](https://doi.org/10.1023/A:1010933404324)
+
+---
+#  References 
+
++ GOLDSTEIN, H. (2010). Multilevel Statistical Models , John Wiley &amp; Sons Inc.
++ GREVEN , S. &amp; KNEIB, T. 2010. On the behaviour of marginal and conditional AIC in linear mixed models. *Biometrika,* 97 **,** 773-789.
++ HASTIE, T. &amp; TIBSHIRANI, R. 1986. Generalized Additive Models. Statist. Sci. 1 no . 3, 297--310. doi:10.1214/ss/1177013604.
++ HUBER , P. J. 1967 The behavior of maximum likelihood estimates under nonstandard conditions.  Proceedings of the Fifth Berkeley Symposium on Mathematical Statistics and Probability, Volume 1: Statistics, Berkeley , Calif.: University of California Press, 221-233.
++ MCCULLAGH, P. &amp; NELDER, J. A. 1983. *Generalized linear models,* London, Chapman &amp; Hall .
++ NELDER , J. A. &amp; WEDDERBURN, R. W. M. 1972. Generalized Linear Models. *Journal of the Royal Statistical Society. Series A (General),* 135 **,** 370-384 .
++ RABE-HESKETH, S. &amp; SKRONDAL, A. 2012. Multilevel and Longitudinal Modeling Using Stata, Volumes I and II, Third Edition. 3rd ed.: Taylor &amp; Francis .
++ SPEIGELHALTER, D.J., 2005a. Funnel plots for comparing institutional performance. *Stat Med,* **24** (8), pp. 1185-1202 VER HOEF, J. M. &amp; BOVENG, P. L. 2007. Quasi-Poisson vs. negative binomial regression: how should we model overdispersed count data? *Ecology,* 88 **,** 2766-72 .
++ SPIEGELHALTER, D.J., 2005b. Handling over-dispersion of performance indicators. *Qual Saf Health Care,* **14** (5), pp. 347-351.
++ WOOD , S. N. 2017. *Generalized Additive Models: An Introduction with R, Second Edition,* Florida, USA, CRC Press .
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create();
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();</script>
+
+<script>
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
